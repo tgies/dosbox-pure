@@ -29,7 +29,7 @@
  *          YMF262 and VRC VII decaps and die shots.
  *
  * Upstream version: 1.8 (commit cfedb09)
- * Fork version:    1.8-fast.2
+ * Fork version:    1.8-fast.3
  * Fork home:       https://github.com/tgies/Nuked-OPL3-fast
  *
  * Nuked-OPL3-fast is a bit-exact performance-optimized fork of Nuked-OPL3.
@@ -57,6 +57,11 @@ struct _opl3_slot {
     Bit32u pg_reset;
     Bit32u pg_phase;
     Bit32u pg_inc;
+    /* Equal to chip->write_gen while the slot is provably inert: fully
+     * attenuated, key off, all-zero phase/output state, and mod/trem frozen
+     * at zeromod. Set by the trivially-dead path in OPL3_ProcessSlotMaybeInline;
+     * invalidated by any register write (write_gen bump). 0 = not dormant. */
+    Bit32u dormant_gen;
     Bit16s out;
     Bit16s fbmod;
     Bit16s prout;
@@ -143,11 +148,23 @@ struct _opl3_chip {
     Bit8u tremolopos;
     Bit8u tremoloshift;
     Bit8u tremolo_dirty;
+    /* Bumped on every OPL3_WriteReg call; never 0 after reset. A slot whose
+     * dormant_gen matches is skipped without re-checking its dead-state
+     * conditions. Wrap is handled by clearing all dormant_gen tags. */
+    Bit32u write_gen;
     Bit32u noise;
     /* Bit 0 of the noise LFSR state as seen by the hh (slot 13) and sd
      * (slot 16) rhythm operators, precomputed per sample */
     Bit32u noise_hh;
     Bit32u noise_sd;
+    /* Channels eligible for each mix pass: out_cnt > 0 and routed to at
+     * least one output on that side. Eligibility only changes on register
+     * writes; mix_dirty triggers a rebuild at the top of the next sample. */
+    opl3_channel *mix_left[18];
+    opl3_channel *mix_right[18];
+    Bit8u nmix_left;
+    Bit8u nmix_right;
+    Bit8u mix_dirty;
     Bit16s zeromod;
     Bit32s mixbuff[4];
     Bit8u rm_hh_bit2;
